@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#07110e" />
+    <title>Corner Pocket</title>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="Corner Pocket home">
+          <span class="brand-mark"><i></i><i></i><i></i></span>
+          <span>CORNER <b>POCKET</b></span>
+        </a>
+        <div class="turn-card">
+          <span id="turn-label">PLAYER ONE</span>
+          <strong id="turn-status">YOUR SHOT</strong>
+        </div>
+        <button class="icon-button" id="reset-button" type="button" aria-label="Reset game" title="Reset game">↻</button>
+      </header>
+
+      <section class="game-layout">
+        <aside class="score-panel player-one active" id="player-one-panel">
+          <p>PLAYER 1</p>
+          <strong id="player-one-score">0</strong>
+          <span>SOLIDS</span>
+          <div class="ball-tray" id="player-one-tray"></div>
+        </aside>
+
+        <div class="table-wrap" id="table-wrap">
+          <div id="game-canvas" aria-label="Interactive 3D pool table"></div>
+          <div class="foul-notice hidden" id="foul-notice" role="status" aria-live="polite">
+            <span>FOUL</span>
+            <strong id="foul-reason">Cue ball scratched</strong>
+          </div>
+          <div class="table-message hidden" id="table-message">
+            <span id="message-kicker">GAME OVER</span>
+            <strong id="message-title">PLAYER ONE WINS</strong>
+            <button id="play-again" type="button">PLAY AGAIN</button>
+          </div>
+          <div class="mobile-hint">DRAG TO AIM · RELEASE TO SHOOT</div>
+        </div>
+
+        <aside class="score-panel player-two" id="player-two-panel">
+          <p>PLAYER 2</p>
+          <strong id="player-two-score">0</strong>
+          <span>STRIPES</span>
+          <div class="ball-tray" id="player-two-tray"></div>
+        </aside>
+      </section>
+
+      <footer class="control-deck">
+        <div class="control-copy">
+          <span>AIM</span>
+          <strong>MOVE YOUR POINTER</strong>
+        </div>
+        <div class="power-control">
+          <label for="power-slider"><span>SHOT POWER</span><strong id="power-value">48%</strong></label>
+          <input id="power-slider" type="range" min="15" max="100" value="48" />
+          <div class="power-scale"><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+        <button class="shoot-button" id="shoot-button" type="button">
+          <span>SHOOT</span>
+          <small>SPACE</small>
+        </button>
+      </footer>
+    </main>
+
+    <script type="module" src="/src/app/main.js"></script>
+  </body>
+</html>
