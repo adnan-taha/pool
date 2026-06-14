@@ -1,0 +1,848 @@
+CORNER POCKET - DETAILED CODE EXPLANATION
+==========================================
+
+1. PROJECT PURPOSE
+------------------
+
+This project is a two-player eight-ball pool game that runs in a web browser.
+Three.js is used for the 3D scene, camera, lighting, table, cue, and balls.
+The movement and collision behavior are implemented by a custom physics engine.
+Separate rule code records each shot and decides whether it caused a foul,
+changed the turn, or ended the game.
+
+The project deliberately separates responsibilities into folders:
+
+  index.html                  Page structure and UI elements
+  package.json                Dependencies and npm commands
+  src/app/main.js             Main controller and application lifecycle
+  src/config/constants.js     Shared table and physics values
+  src/engine/physics.js       Ball movement, collisions, rails, and pockets
+  src/rendering/scene.js      Three.js scene, camera, renderer, and lights
+  src/rendering/table.js      3D table construction
+  src/rendering/balls.js      Ball textures, meshes, and initial rack
+  src/rendering/aim-guide.js  Cue stick and aiming line
+  src/rules/eight-ball.js     Shot records, fouls, turns, and winning rules
+  src/ui/dom.js               HTML updates and notifications
+  src/styles/main.css         Layout, colors, controls, and responsive design
+  tests/eight-ball.test.js    Automated tests for rule decisions
+  docs/39.docx                Original physics research document
+
+
+2. TECHNOLOGY AND EXECUTION
+---------------------------
+
+package.json declares two packages:
+
+  three  - the 3D graphics library used by the game
+  vite   - the development server and production bundler
+
+The project uses JavaScript ES modules because package.json contains:
+
+  "type": "module"
+
+The available commands are:
+
+  npm run dev      Start Vite's local development server
+  npm run build    Create the optimized production files in dist/
+  npm test         Run Node's built-in test runner
+  npm run preview  Preview the production build locally
+
+When the browser opens index.html, the final script tag loads:
+
+  /src/app/main.js
+
+Vite follows all imports from that file, includes Three.js and the CSS, and
+serves or bundles the complete application.
+
+
+3. HTML PAGE - index.html
+-------------------------
+
+The HTML does not create the 3D objects. It creates containers and controls
+that JavaScript later updates.
+
+The main element has three sections:
+
+  A. Header
+     - Displays the Corner Pocket brand.
+     - Shows the current player and current state, such as YOUR SHOT,
+       BALLS IN MOTION, or BALL IN HAND.
+     - Contains the reset button.
+
+  B. Game area
+     - The left score panel represents Player 1 and solids, balls 1-7.
+     - #game-canvas is where the Three.js renderer inserts its canvas.
+     - #foul-notice displays a temporary foul message.
+     - #table-message displays the winner and Play Again button.
+     - The right score panel represents Player 2 and stripes, balls 9-15.
+
+  C. Control deck
+     - Explains that the pointer controls aiming.
+     - Provides a shot-power range input from 15 to 100 percent.
+     - Provides the Shoot button. The Space key performs the same action.
+
+Element IDs are important. src/ui/dom.js finds these elements with
+document.querySelector() and exposes them to the rest of the game.
+
+
+4. SHARED CONSTANTS - src/config/constants.js
+------------------------------------------------
+
+This module is the single source for dimensions and simulation values.
+
+TABLE contains:
+
+  width: 10
+    The playable table width in Three.js world units.
+
+  height: 5.3
+    The playable table depth. The game uses x and z as its flat-table axes.
+
+  rail: 0.36
+    The visual thickness of the wooden rails.
+
+  ballRadius: 0.14
+    Radius used for ball geometry, collision detection, and rail limits.
+
+  pocketRadius: 0.27
+    Radius used to draw pockets and determine whether a ball is pocketed.
+
+PHYSICS contains:
+
+  fixedStep: 1 / 120
+    Physics advances in fixed 1/120-second increments. Fixed steps make the
+    result much less dependent on monitor refresh rate or temporary lag.
+
+  stopSpeed: 0.025
+    Velocities below this value are changed to exactly zero. Without this,
+    floating-point values could cause balls to move forever at tiny speeds.
+
+  rollingDeceleration: 0.48
+    Speed removed every second to represent rolling resistance and friction.
+
+  cushionRestitution: 0.82
+    A ball keeps 82 percent of its perpendicular speed after hitting a rail.
+
+  ballRestitution: 0.96
+    Ball-to-ball collisions retain 96 percent of relative collision speed.
+    A value of 1 would be a perfectly elastic collision.
+
+BALL_COLORS stores hexadecimal colors for balls 1 through 15.
+
+POCKET_POSITIONS calculates the six pocket centers from the table dimensions:
+four corners and two centers on the long sides.
+
+
+5. THREE.JS SCENE - src/rendering/scene.js
+------------------------------------------
+
+createScene(canvasHost) builds the basic Three.js environment.
+
+Scene:
+
+  const scene = new THREE.Scene();
+
+The scene is the root container for every Three.js object. The table, balls,
+lights, and aiming guide are later added to it.
+
+Camera:
+
+  new THREE.PerspectiveCamera(32, 1, 0.1, 100)
+
+The arguments are field of view, aspect ratio, near clipping distance, and far
+clipping distance. The camera is placed above and in front of the table at
+(0, 8.5, 8.5), then aimed at the world origin.
+
+Renderer:
+
+  new THREE.WebGLRenderer({ antialias: true, alpha: true })
+
+The renderer converts the 3D scene into pixels using WebGL. Antialiasing makes
+edges smoother. Its pixel ratio is limited to 2 so high-density screens look
+sharp without excessive GPU work.
+
+Shadows are enabled with PCFSoftShadowMap. SRGB output and ACES filmic tone
+mapping improve color and light appearance.
+
+Lights:
+
+  HemisphereLight supplies broad ambient light from above and below.
+  DirectionalLight provides the stronger main light and casts shadows.
+
+resize(width, height) updates both the renderer dimensions and camera aspect
+ratio. updateProjectionMatrix() must be called after changing camera settings.
+
+The function returns scene, camera, renderer, and resize instead of placing
+them in global variables. This makes the module easier to reuse and test.
+
+
+6. TABLE RENDERING - src/rendering/table.js
+-------------------------------------------
+
+createTable(scene) builds the table as a THREE.Group. Grouping means the full
+table could later be moved or rotated as one object.
+
+The local box() helper creates:
+
+  THREE.BoxGeometry
+    Defines a rectangular shape.
+
+  THREE.MeshStandardMaterial
+    Gives the shape a physically lit color, roughness, and slight metalness.
+
+  THREE.Mesh
+    Combines geometry and material into a visible object.
+
+box() also enables casting and receiving shadows and adds the mesh to the table
+group.
+
+The table is built in layers:
+
+  1. A dark lower wooden body
+  2. A lighter wooden upper frame
+  3. A green playing surface
+  4. Four wooden rails
+  5. Four green cushions inside the rails
+  6. Six dark cylinders representing pockets
+  7. Small cream diamonds used as rail markers
+
+This is a visual model only. Physical boundaries are calculated separately in
+the physics engine from TABLE.width, TABLE.height, and TABLE.ballRadius.
+
+
+7. BALL CREATION - src/rendering/balls.js
+-----------------------------------------
+
+RACK_NUMBERS stores the order used to place the 15 object balls. The order
+mixes solids and stripes and places the 8-ball inside the rack.
+
+createNumberTexture(number, color) generates a texture at runtime:
+
+  1. It creates an off-screen HTML canvas.
+  2. It fills the background with the ball color.
+  3. For balls 9-15, it uses a cream background and draws a colored stripe.
+  4. It draws a cream number circle.
+  5. It draws the ball number in the center.
+  6. It converts the canvas into THREE.CanvasTexture.
+
+This avoids requiring 16 separate image files.
+
+createBalls(scene) creates one shared SphereGeometry. Sharing geometry reduces
+memory use because every ball has the same shape.
+
+addBall(number, x, z) creates a mesh and a game-state object:
+
+  {
+    number,       // 0 for cue, 1-15 for object balls
+    mesh,         // the visible Three.js sphere
+    velocity,     // THREE.Vector2 storing x and z movement
+    active,       // false after a ball is pocketed
+    pocketing     // true during the pocket animation
+  }
+
+The physics is two-dimensional even though rendering is three-dimensional.
+velocity.x maps to mesh.position.x and velocity.y maps to mesh.position.z.
+The Three.js y axis is reserved for height above the table.
+
+The cue ball starts at (-2.6, 0). The rack is generated with nested loops:
+
+  row 0 has 1 ball
+  row 1 has 2 balls
+  row 2 has 3 balls
+  row 3 has 4 balls
+  row 4 has 5 balls
+
+The x position advances with each row, and the z formula centers every row.
+
+
+8. AIMING GUIDE - src/rendering/aim-guide.js
+--------------------------------------------
+
+createAimGuide(scene) creates a group containing:
+
+  A dashed THREE.Line showing the shot direction.
+  A tapered cylinder representing the cue stick.
+
+computeLineDistances() is required for dashed materials because Three.js needs
+distance information to know where each dash and gap should appear.
+
+position(cueBall, direction, power):
+
+  - Copies the cue-ball position to the guide group.
+  - Raises it slightly so the guide is visible above the table.
+  - Uses atan2() to rotate it toward the chosen direction.
+  - Pulls the cue farther backward as power increases.
+
+The guide is hidden immediately after a shot and shown when the balls stop.
+
+
+9. PHYSICS ENGINE - src/engine/physics.js
+-----------------------------------------
+
+PhysicsEngine accepts the balls array and an events object. The events object
+keeps physics independent of pool rules. Physics reports what happened; the
+rules module decides what it means.
+
+Supported callbacks are:
+
+  onBallCollision(a, b)
+  onRailContact(ball)
+  onPocket(ball)
+  onPocketComplete(ball)
+
+9.1 step(dt)
+
+Each fixed physics step performs two phases:
+
+  1. updateBall() moves every active ball and handles rails and pockets.
+  2. Nested loops test each unique pair of active balls for a collision.
+
+For 16 balls, the maximum pair count is:
+
+  16 * 15 / 2 = 120 pairs
+
+The inner loop starts at i + 1, so a pair is never checked twice and a ball is
+never checked against itself.
+
+9.2 isSettled()
+
+The shot is finished only when:
+
+  - No ball is currently playing its pocket animation.
+  - Every active ball has a squared velocity of zero.
+
+lengthSq() avoids a square-root calculation and is sufficient for checking
+whether the velocity is zero.
+
+9.3 resolveCollision(a, b)
+
+Collision detection uses the distance between ball centers:
+
+  dx = b.x - a.x
+  dz = b.z - a.z
+  distanceSquared = dx^2 + dz^2
+
+Two balls overlap when the distance between centers is less than two radii.
+Squared values are compared first to avoid an unnecessary square root when
+there is no collision.
+
+When a collision exists:
+
+  1. The true distance is calculated.
+  2. (nx, nz) becomes the normalized collision direction.
+  3. The overlap is divided equally, moving each ball away by half.
+
+Separating overlapping balls prevents them from remaining embedded and
+repeatedly receiving large collision impulses.
+
+Relative speed along the collision normal is:
+
+  relativeSpeed = (velocityB - velocityA) dot normal
+
+If it is zero or positive, the balls are already separating, so no impulse is
+applied.
+
+For equal-mass balls, the scalar impulse is approximated by:
+
+  impulse = -(1 + restitution) * relativeSpeed / 2
+
+The impulse is subtracted from ball A and added to ball B along the collision
+normal. Tangential velocity is unchanged because ball-to-ball friction and spin
+transfer are not currently simulated.
+
+After applying the impulse, onBallCollision reports the event. The rule system
+uses this event to identify the cue ball's first object-ball contact.
+
+9.4 updateBall(ball, dt)
+
+Position uses basic linear motion:
+
+  position = position + velocity * dt
+
+Rolling resistance is approximated as constant deceleration:
+
+  nextSpeed = max(0, currentSpeed - rollingDeceleration * dt)
+
+The velocity vector is scaled to preserve direction while reducing magnitude.
+
+The visible sphere rotates around an axis perpendicular to its movement:
+
+  axis = (velocity.z, 0, -velocity.x)
+  rotation angle = speed * dt / ballRadius
+
+This follows the rolling relation angle = traveled distance / radius.
+
+If speed becomes smaller than stopSpeed, velocity is set to exactly zero.
+
+Pockets are checked before rail reflection. This is important near corners,
+where a ball should fall into a pocket instead of bouncing from an invisible
+rectangular boundary.
+
+Rail collisions clamp the ball center inside the playable area and reverse the
+relevant velocity component:
+
+  velocity.x = -velocity.x * cushionRestitution
+
+or the equivalent operation for z. Math.abs() ensures the result points toward
+the table even if overlap or numerical error gave the velocity a bad sign.
+
+9.5 checkPocket(ball)
+
+For every pocket, the engine calculates the squared horizontal distance from
+the ball center to the pocket center. If it is within the threshold, the ball
+is pocketed.
+
+The threshold includes a factor of 1.28 to make the pockets slightly more
+forgiving than their visible radius.
+
+9.6 pocketBall(ball, pocketX, pocketZ)
+
+The ball is immediately marked pocketing and its velocity is cleared. The
+onPocket callback is fired immediately so shot rules know the result before
+the animation finishes.
+
+Over 220 milliseconds, linear interpolation moves the ball to the pocket,
+lowers it below the table, and reduces its scale. At the end:
+
+  active becomes false
+  visible becomes false
+  pocketing becomes false
+
+The onPocketComplete callback then refreshes the scoreboard.
+
+
+10. EIGHT-BALL RULES - src/rules/eight-ball.js
+----------------------------------------------
+
+This module contains no DOM or Three.js operations. It works with plain values,
+which makes it easy to test.
+
+10.1 createShotRecord(mustHitEight)
+
+Every shot gets a fresh record:
+
+  mustHitEight
+    True when the current player had already cleared their group before the
+    shot began. Capturing this before the shot prevents the required target
+    from changing while balls are still moving.
+
+  firstContact
+    Number of the first object ball touched by the cue ball, or null.
+
+  railAfterContact
+    True when any ball hits a rail after first cue-ball contact.
+
+  pocketed
+    Array of ball numbers pocketed during this shot.
+
+  scratched
+    True if ball 0, the cue ball, was pocketed.
+
+10.2 recordCueContact(shot, firstBall, secondBall)
+
+This function only does work while firstContact is null. It checks whether one
+ball is number 0 and records the other ball's number. Later collisions cannot
+overwrite the first contact.
+
+10.3 recordRailContact(shot)
+
+A rail only satisfies the rule when it occurs after first contact. A cue ball
+hitting a cushion before touching an object ball therefore does not incorrectly
+count as the required post-contact rail.
+
+10.4 recordPocket(shot, ballNumber)
+
+The ball number is added to pocketed. Number 0 also sets scratched to true.
+
+10.5 isPlayerBall(number, player)
+
+Player 1 owns solids, numbers 1-7.
+Player 2 owns stripes, numbers 9-15.
+
+The 8-ball belongs to neither group.
+
+10.6 evaluateShot({ shot, player, balls })
+
+This is the central rule-decision function.
+
+First it checks whether the current player still has any active group balls.
+It then determines legal first contact:
+
+  - If mustHitEight is true, the first contact must be ball 8.
+  - Otherwise, the first contact must be one of the player's group balls.
+
+Fouls are evaluated in priority order:
+
+  1. Cue ball scratched
+  2. No object ball contacted
+  3. Wrong group or wrong 8-ball contact
+  4. No pocket and no rail after contact
+
+Only one foul message is returned, even if multiple violations occurred.
+
+If the 8-ball was pocketed:
+
+  - The opponent wins if there was a foul.
+  - The opponent wins if the player's group was not cleared.
+  - Otherwise, the current player wins.
+
+For a normal shot, keepTurn is true only when there was no foul and the player
+pocketed at least one ball from their own group.
+
+
+11. USER INTERFACE MODULE - src/ui/dom.js
+-----------------------------------------
+
+The dom object performs all querySelector calls in one place. Other modules can
+use dom.shoot or dom.turnStatus instead of repeatedly searching the document.
+
+updateTurn(player, status):
+
+  - Changes PLAYER ONE / PLAYER TWO in the header.
+  - Changes the status text.
+  - Adds the active class to the current player's score panel.
+
+updateScoreboard(balls):
+
+  - Counts inactive solids for Player 1's score.
+  - Counts inactive stripes for Player 2's score.
+  - Clears both visual ball trays.
+  - Recreates one colored dot for each pocketed group ball.
+
+showFoul(reason):
+
+  - Replaces the foul-reason text.
+  - Removes the hidden class.
+  - Hides the notice after 2.6 seconds.
+  - Clears the previous timer so overlapping notices behave correctly.
+
+showWinner(winner):
+
+  - Updates the game-over message.
+  - Removes the hidden class from the full table overlay.
+
+
+12. MAIN APPLICATION - src/app/main.js
+--------------------------------------
+
+main.js is the orchestration layer. It imports every subsystem and controls the
+game's lifecycle without containing the detailed rendering or rule algorithms.
+
+12.1 Initialization
+
+The code creates objects in this order:
+
+  1. createScene(dom.canvas)
+  2. createTable(world.scene)
+  3. createBalls(world.scene)
+  4. createAimGuide(world.scene)
+
+It then stores mutable game state:
+
+  currentPlayer = 1
+  shotActive = false
+  gameOver = false
+  shot = an empty shot record
+  accumulator = saved unprocessed physics time
+  lastTime = previous animation timestamp
+  dragging = pointer/touch state
+
+12.2 Connecting physics to rules
+
+PhysicsEngine is constructed with callbacks:
+
+  onBallCollision -> recordCueContact()
+  onRailContact   -> recordRailContact()
+  onPocket        -> recordPocket()
+  onPocketComplete -> updateScoreboard()
+
+Events are only recorded while shotActive is true. This avoids counting setup
+or animation events outside an actual shot.
+
+12.3 Pointer aiming
+
+Browser pointer coordinates are measured in pixels, but Three.js raycasting
+expects normalized device coordinates from -1 to +1.
+
+updateAim() converts them with:
+
+  pointer.x = horizontal position * 2 - 1
+  pointer.y = -(vertical position * 2 - 1)
+
+The y coordinate is inverted because browser coordinates increase downward,
+while normalized Three.js coordinates increase upward.
+
+raycaster.setFromCamera() creates a 3D ray through the pointer. That ray is
+intersected with a horizontal Plane representing the table surface.
+
+The aiming direction is:
+
+  intersection position - cue-ball position
+
+normalize() changes its length to 1, keeping only direction. Shot power can
+then multiply this unit vector to produce the desired velocity.
+
+12.4 shoot()
+
+shoot() first rejects invalid attempts when:
+
+  - A shot is already active.
+  - The game has ended.
+  - The cue ball is unavailable.
+
+It checks whether the current player has group balls remaining. This determines
+whether the shot must legally contact the 8-ball first.
+
+Slider percentage is converted to speed:
+
+  speed = 3.2 + sliderFraction * 8.8
+
+At the minimum slider value of 15 percent, speed is approximately 4.52 units
+per second. At 100 percent, speed is 12 units per second.
+
+The cue-ball velocity becomes:
+
+  normalized aim direction * speed
+
+The function marks the shot active, hides the guide, disables the Shoot button,
+and updates the status to BALLS IN MOTION.
+
+12.5 Cue-ball respawn after a foul
+
+findCueBallPosition() creates candidate locations in the left/head region of
+the table. For each candidate, it checks the squared distance to every active
+object ball. The first non-overlapping location is selected.
+
+respawnCueBall() restores the cue ball's active, visible, scale, position, and
+velocity properties.
+
+This is an automatic form of ball in hand. The current implementation does not
+allow the player to drag the cue ball manually.
+
+12.6 endTurn()
+
+This runs only after PhysicsEngine reports that all balls are settled.
+
+It sends the shot record, current player, and ball state to evaluateShot().
+
+If there is a winner:
+
+  - gameOver becomes true.
+  - Shooting is disabled.
+  - The aiming guide remains hidden.
+  - Any final foul is shown.
+  - The winner overlay is displayed.
+
+If there is a foul:
+
+  - The foul reason is displayed.
+  - The player changes.
+  - The cue ball is restored to a legal free position.
+  - The status becomes BALL IN HAND.
+
+If there is no foul:
+
+  - The current player stays when keepTurn is true.
+  - Otherwise, the player changes.
+
+Finally, the aiming guide and Shoot button are restored for the next shot.
+
+12.7 Fixed-step animation loop
+
+requestAnimationFrame calls animate(now), normally near the display refresh
+rate. The elapsed frame time is limited to 0.05 seconds so returning from a
+paused tab does not cause one extremely large simulation step.
+
+The accumulator pattern works as follows:
+
+  accumulator += real elapsed frame time
+
+  while accumulator contains at least 1/120 second:
+      advance physics by exactly 1/120 second
+      subtract 1/120 second from accumulator
+
+This decouples physics frequency from rendering frequency. A 60 Hz display will
+usually perform two physics steps before each render. A temporarily slow frame
+will perform more steps to catch up.
+
+After physics, main.js checks whether an active shot is settled and ends the
+turn if necessary. The scene is then rendered from the camera.
+
+12.8 Input event listeners
+
+Power slider input:
+  Updates the percentage label, filled gradient, and cue pullback.
+
+Shoot button click:
+  Calls shoot().
+
+Reset and Play Again:
+  Reload the page, recreating the initial state.
+
+Space key:
+  Prevents page scrolling and calls shoot().
+
+Pointer down and move:
+  Aim the shot. Pointer events support both mouse and touch hardware.
+
+Touch pointer up:
+  Shoots after the player drags and releases.
+
+Window resize:
+  Resizes the renderer and updates the camera.
+
+The last five statements initialize sizing, aim-guide position, player UI,
+scoreboard, and the animation loop.
+
+
+13. CSS - src/styles/main.css
+--------------------------------
+
+The CSS controls presentation only; it does not affect game rules or physics.
+
+Main design choices:
+
+  - CSS custom properties define reusable cream, gold, green, and muted colors.
+  - The page uses a three-row grid: header, game area, and controls.
+  - The game area uses three columns: Player 1, table, Player 2.
+  - The table wrapper has a fixed aspect ratio and contains the canvas and
+    notification overlays.
+  - The active player panel receives higher opacity and a slight translation.
+  - The power slider uses a dynamic inline gradient updated by main.js.
+  - .hidden controls foul and game-over visibility.
+
+Responsive breakpoints:
+
+  At widths below 900 pixels, panels and controls become narrower.
+
+  At widths below 640 pixels, the table occupies the full first row, score
+  panels move below it, desktop instructional text is removed, and a touch hint
+  is displayed.
+
+The file imports Google Fonts. If the network is unavailable, the browser falls
+back to generic sans-serif fonts while the game remains functional.
+
+
+14. AUTOMATED TESTS - tests/eight-ball.test.js
+------------------------------------------------
+
+The tests use Node's built-in node:test module and strict assertions. They test
+the pure rules module without starting a browser or Three.js renderer.
+
+The ball(number, active) helper creates the smallest object needed by the rule
+function. A full Three.js mesh is unnecessary because evaluateShot only reads
+number and active.
+
+Covered cases are:
+
+  - Pocketing the cue ball produces a scratch foul.
+  - Failing to touch an object ball produces a foul.
+  - Touching the opponent's group first produces a foul.
+  - Failing to pocket a ball or reach a rail after contact produces a foul.
+  - Legally pocketing the player's own ball keeps the turn.
+  - Legally pocketing the 8-ball after clearing the group wins the game.
+
+Run these tests with:
+
+  npm test
+
+
+15. COMPLETE RUNTIME FLOW
+-------------------------
+
+The complete sequence from page load through one shot is:
+
+  1. index.html loads main.js.
+  2. main.js creates the scene, table, balls, and aiming guide.
+  3. The animation loop begins rendering.
+  4. Pointer movement is raycast onto the table plane.
+  5. The normalized vector from cue ball to pointer becomes aimDirection.
+  6. The player chooses power and shoots.
+  7. A new shot record is created.
+  8. The cue ball receives velocity.
+  9. Fixed physics steps move all balls.
+ 10. Collision, rail, and pocket events update the shot record.
+ 11. Friction eventually reduces all active velocities to zero.
+ 12. endTurn() sends the recorded facts to evaluateShot().
+ 13. The rules module returns foul, winner, and keepTurn values.
+ 14. main.js updates the current player, cue ball, controls, and messages.
+ 15. The aiming guide appears for the next legal shot.
+
+
+16. CURRENT SIMPLIFICATIONS AND LIMITATIONS
+-------------------------------------------
+
+This is a playable simplified implementation, not a complete professional pool
+simulation or tournament rules engine.
+
+Rules simplifications:
+
+  - Player 1 is always solids and Player 2 is always stripes.
+  - There is no open-table phase after the break.
+  - Break-specific requirements are not implemented.
+  - Pockets are not called before shooting the 8-ball.
+  - Ball in hand is placed automatically instead of by player dragging.
+  - The ball-in-hand area is the left/head portion of the table.
+
+Physics simplifications:
+
+  - Balls have equal mass.
+  - Ball collisions use a basic impulse model.
+  - Spin, English, draw, follow, and masse effects are not implemented.
+  - Ball-to-ball friction and angular momentum transfer are omitted.
+  - Cushion geometry is physically rectangular, even though pockets are drawn.
+  - Air resistance is omitted because table friction dominates at this scale.
+  - Pocket capture is based on center distance rather than detailed jaw geometry.
+
+Software limitations:
+
+  - Reset reloads the entire page instead of resetting objects in memory.
+  - The rendering and physics objects share mutable ball state. This is simple
+    and efficient for a small game but would need more formal state management
+    for networking, replay, or deterministic save/load support.
+
+
+17. HOW TO MODIFY IMPORTANT BEHAVIOR
+------------------------------------
+
+Change table dimensions or ball size:
+  Edit src/config/constants.js under TABLE.
+
+Change friction or bounce:
+  Edit rollingDeceleration, cushionRestitution, or ballRestitution under PHYSICS.
+
+Change shot power range:
+  Edit the slider min/max in index.html and the speed formula in shoot().
+
+Change the rack order:
+  Edit RACK_NUMBERS in src/rendering/balls.js.
+
+Add or change a foul:
+  Record the necessary event in the shot object, then update evaluateShot() in
+  src/rules/eight-ball.js and add a test in tests/eight-ball.test.js.
+
+Change the camera:
+  Edit camera.position and camera.lookAt() in src/rendering/scene.js.
+
+Change visual table construction:
+  Edit src/rendering/table.js.
+
+Change interface layout and colors:
+  Edit index.html and src/styles/main.css.
+
+
+18. ARCHITECTURAL SUMMARY
+-------------------------
+
+The central design principle is separation of concerns:
+
+  Rendering knows how the game looks.
+  Physics knows how balls move and collide.
+  Rules know whether recorded events are legal.
+  UI knows how to update HTML.
+  main.js knows when to call each subsystem.
+
+This separation prevents pool-rule conditions from becoming mixed into vector
+math and prevents Three.js rendering details from becoming mixed into foul
+tests. As the game grows, features can be added to the appropriate module with
+less risk of breaking unrelated behavior.
