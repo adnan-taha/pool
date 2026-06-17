@@ -148,9 +148,29 @@ button { color: inherit; }
   font-family: "Barlow Condensed", sans-serif;
 }
 .score-panel.active { opacity: 1; transform: translateY(-4px); }
-.score-panel p { margin: 0; color: #83928b; font-size: 12px; font-weight: 700; letter-spacing: .18em; }
+.player-name {
+  width: min(132px, 100%);
+  margin: 0;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #b7c3bd;
+  text-align: center;
+  text-transform: uppercase;
+  font: 700 12px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: .12em;
+}
+.score-panel.active .player-name { color: var(--cream); }
+.player-name:focus {
+  outline: none;
+  border-color: rgba(213, 166, 60, .72);
+  background: rgba(255,255,255,.04);
+}
 .score-panel > strong { margin: 3px 0 -4px; font-size: clamp(64px, 7vw, 102px); font-weight: 500; line-height: 1; color: var(--cream); }
 .score-panel > span { color: var(--gold); font-size: 12px; font-weight: 800; letter-spacing: .16em; }
+.score-panel small { margin-top: 5px; color: #84928c; font-size: 10px; font-weight: 700; letter-spacing: .14em; }
+.score-panel small b { color: var(--cream); font-weight: 800; }
 .ball-tray { display: grid; grid-template-columns: repeat(4, 12px); gap: 6px; margin-top: 18px; min-height: 30px; }
 .tray-ball { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 2px 3px #0008; }
 
@@ -176,13 +196,21 @@ input[type="range"] {
   margin: 0;
   appearance: none;
   border-radius: 6px;
-  background: linear-gradient(90deg, var(--gold) 48%, #26342e 48%);
+  background: linear-gradient(90deg, var(--gold) 38.82%, #26342e 38.82%);
   outline: none;
 }
 input[type="range"]::-webkit-slider-thumb { appearance: none; width: 17px; height: 17px; border-radius: 50%; background: var(--cream); border: 4px solid var(--gold); cursor: grab; box-shadow: 0 1px 6px #000; }
 input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border-radius: 50%; background: var(--cream); border: 4px solid var(--gold); cursor: grab; }
 .power-scale { display: flex; justify-content: space-between; margin-top: 9px; }
 .power-scale i { width: 1px; height: 4px; background: #526058; }
+.power-keys {
+  display: block;
+  margin-top: 7px;
+  color: #6e7d76;
+  text-align: center;
+  font: 700 9px/1 "Barlow Condensed", sans-serif;
+  letter-spacing: .16em;
+}
 
 .shoot-button {
   justify-self: end;
@@ -239,8 +267,9 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border-radius
   .table-wrap { grid-column: 1 / -1; grid-row: 1; width: 100%; }
   .score-panel { min-height: 80px; flex-flow: row wrap; gap: 8px; }
   .score-panel > strong { font-size: 35px; order: -1; }
-  .score-panel p { font-size: 10px; }
-  .score-panel > span { display: none; }
+  .player-name { width: 82px; font-size: 10px; }
+  .score-panel > span { font-size: 9px; }
+  .score-panel small { display: none; }
   .ball-tray { display: flex; margin: 0; min-height: 0; }
   .mobile-hint { display: block; }
   .control-deck { min-height: 94px; grid-template-columns: 1fr 105px; padding: 13px 16px; gap: 14px; }

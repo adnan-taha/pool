@@ -22,9 +22,10 @@
 
       <section class="game-layout">
         <aside class="score-panel player-one active" id="player-one-panel">
-          <p>PLAYER 1</p>
+          <input class="player-name" id="player-one-name" maxlength="16" value="Player 1" aria-label="Player one name" />
           <strong id="player-one-score">0</strong>
-          <span>SOLIDS</span>
+          <span id="player-one-group">OPEN</span>
+          <small>WINS <b id="player-one-match">0</b></small>
           <div class="ball-tray" id="player-one-tray"></div>
         </aside>
 
@@ -43,9 +44,10 @@
         </div>
 
         <aside class="score-panel player-two" id="player-two-panel">
-          <p>PLAYER 2</p>
+          <input class="player-name" id="player-two-name" maxlength="16" value="Player 2" aria-label="Player two name" />
           <strong id="player-two-score">0</strong>
-          <span>STRIPES</span>
+          <span id="player-two-group">OPEN</span>
+          <small>WINS <b id="player-two-match">0</b></small>
           <div class="ball-tray" id="player-two-tray"></div>
         </aside>
       </section>
@@ -59,6 +61,7 @@
           <label for="power-slider"><span>SHOT POWER</span><strong id="power-value">48%</strong></label>
           <input id="power-slider" type="range" min="15" max="100" value="48" />
           <div class="power-scale"><i></i><i></i><i></i><i></i><i></i></div>
+          <small class="power-keys">ARROWS / +/-</small>
         </div>
         <button class="shoot-button" id="shoot-button" type="button">
           <span>SHOOT</span>

@@ -5,15 +5,25 @@ import { PhysicsEngine } from '../engine/physics.js';
 import {
   createShotRecord,
   evaluateShot,
+  getBallGroup,
   recordCueContact,
   recordPocket,
-  recordRailContact,
+  recordBallRailContact,
 } from '../rules/eight-ball.js';
 import { createAimGuide } from '../rendering/aim-guide.js';
 import { createBalls } from '../rendering/balls.js';
 import { createScene } from '../rendering/scene.js';
 import { createTable } from '../rendering/table.js';
-import { dom, showFoul, showWinner, updateScoreboard, updateTurn } from '../ui/dom.js';
+import {
+  bindPlayerNames,
+  dom,
+  loadPlayerState,
+  savePlayerState,
+  showFoul,
+  showWinner,
+  updateScoreboard,
+  updateTurn,
+} from '../ui/dom.js';
 
 const world = createScene(dom.canvas);
 createTable(world.scene);
@@ -21,24 +31,28 @@ const { balls, cueBall } = createBalls(world.scene);
 const aimGuide = createAimGuide(world.scene);
 
 let currentPlayer = 1;
+let groups = { 1: null, 2: null };
+let breakComplete = false;
 let shotActive = false;
 let gameOver = false;
+let placingCueBall = false;
 let shot = createShotRecord();
 let accumulator = 0;
 let lastTime = performance.now();
 let dragging = false;
+const playerState = loadPlayerState();
 
 const physics = new PhysicsEngine(balls, {
   onBallCollision: (a, b) => {
     if (shotActive) recordCueContact(shot, a, b);
   },
-  onRailContact: () => {
-    if (shotActive) recordRailContact(shot);
+  onRailContact: (ball) => {
+    if (shotActive) recordBallRailContact(shot, ball.number);
   },
   onPocket: (ball) => {
     if (shotActive) recordPocket(shot, ball.number);
   },
-  onPocketComplete: () => updateScoreboard(balls),
+  onPocketComplete: () => updateScoreboard(balls, groups, playerState),
 });
 
 const raycaster = new THREE.Raycaster();
@@ -47,37 +61,133 @@ const intersection = new THREE.Vector3();
 const tablePlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.24);
 const aimDirection = new THREE.Vector2(1, 0);
 
-function positionAimGuide() {
-  aimGuide.position(cueBall, aimDirection, Number(dom.slider.value) / 100);
+function getTurnStatus() {
+  if (!breakComplete) return 'BREAK';
+  if (!groups[currentPlayer]) return 'OPEN TABLE';
+  return 'YOUR SHOT';
 }
 
-function updateAim(clientX, clientY) {
-  if (shotActive || gameOver || !cueBall.active) return;
+function hasPlayerGroupBalls(player) {
+  const group = groups[player];
+  if (!group) return false;
+  return balls.some((ball) => ball.active && getBallGroup(ball.number) === group);
+}
+
+function getTablePoint(clientX, clientY) {
   const rect = world.renderer.domElement.getBoundingClientRect();
   pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pointer, world.camera);
-  if (!raycaster.ray.intersectPlane(tablePlane, intersection)) return;
-  aimDirection.set(intersection.x - cueBall.mesh.position.x, intersection.z - cueBall.mesh.position.z);
+  if (!raycaster.ray.intersectPlane(tablePlane, intersection)) return null;
+  return intersection;
+}
+
+function isLegalCueBallPosition(x, z) {
+  const xLimit = TABLE.width / 2 - TABLE.ballRadius;
+  const zLimit = TABLE.height / 2 - TABLE.ballRadius;
+  if (Math.abs(x) > xLimit || Math.abs(z) > zLimit) return false;
+  return balls.every((ball) => {
+    if (!ball.active || ball.number === 0) return true;
+    const dx = ball.mesh.position.x - x;
+    const dz = ball.mesh.position.z - z;
+    return dx * dx + dz * dz > (TABLE.ballRadius * 2.08) ** 2;
+  });
+}
+
+function moveCueBallToPointer(clientX, clientY) {
+  const point = getTablePoint(clientX, clientY);
+  if (!point) return false;
+  const xLimit = TABLE.width / 2 - TABLE.ballRadius;
+  const zLimit = TABLE.height / 2 - TABLE.ballRadius;
+  const x = THREE.MathUtils.clamp(point.x, -xLimit, xLimit);
+  const z = THREE.MathUtils.clamp(point.z, -zLimit, zLimit);
+  if (!isLegalCueBallPosition(x, z)) return false;
+  cueBall.mesh.position.set(x, TABLE.ballRadius + 0.1, z);
+  cueBall.velocity.set(0, 0);
+  return true;
+}
+
+function getAimPreview() {
+  const origin = cueBall.mesh.position;
+  let bestDistance = 3.6;
+  let secondaryDistance = 0;
+  let secondaryAngle = 0;
+  let secondaryStartX = 0;
+  let secondaryStartZ = 0;
+
+  for (const ball of balls) {
+    if (!ball.active || ball.number === 0) continue;
+    const dx = ball.mesh.position.x - origin.x;
+    const dz = ball.mesh.position.z - origin.z;
+    const along = dx * aimDirection.x + dz * aimDirection.y;
+    if (along <= TABLE.ballRadius * 2 || along >= bestDistance) continue;
+    const perpendicularSq = dx * dx + dz * dz - along * along;
+    const hitRadius = TABLE.ballRadius * 2;
+    if (perpendicularSq > hitRadius * hitRadius) continue;
+    const hitDistance = Math.max(0.25, along - Math.sqrt(hitRadius * hitRadius - perpendicularSq));
+    bestDistance = hitDistance;
+    const cueImpactX = origin.x + aimDirection.x * hitDistance;
+    const cueImpactZ = origin.z + aimDirection.y * hitDistance;
+    const objectDirection = new THREE.Vector2(
+      ball.mesh.position.x - cueImpactX,
+      ball.mesh.position.z - cueImpactZ,
+    ).normalize();
+    secondaryDistance = 0.9;
+    secondaryAngle = Math.atan2(objectDirection.y, objectDirection.x) - Math.atan2(aimDirection.y, aimDirection.x);
+    secondaryStartX = along;
+    secondaryStartZ = -dx * aimDirection.y + dz * aimDirection.x;
+  }
+
+  const xLimit = TABLE.width / 2 - TABLE.ballRadius;
+  const zLimit = TABLE.height / 2 - TABLE.ballRadius;
+  const railDistances = [];
+  if (aimDirection.x > 0) railDistances.push((xLimit - origin.x) / aimDirection.x);
+  if (aimDirection.x < 0) railDistances.push((-xLimit - origin.x) / aimDirection.x);
+  if (aimDirection.y > 0) railDistances.push((zLimit - origin.z) / aimDirection.y);
+  if (aimDirection.y < 0) railDistances.push((-zLimit - origin.z) / aimDirection.y);
+  const railDistance = Math.min(...railDistances.filter((distance) => distance > 0));
+  if (railDistance < bestDistance) {
+    bestDistance = railDistance;
+    const hitX = origin.x + aimDirection.x * railDistance;
+    const hitZ = origin.z + aimDirection.y * railDistance;
+    const reflected = aimDirection.clone();
+    if (Math.abs(Math.abs(hitX) - xLimit) < 0.03) reflected.x *= -1;
+    if (Math.abs(Math.abs(hitZ) - zLimit) < 0.03) reflected.y *= -1;
+    secondaryDistance = 0.9;
+    secondaryAngle = Math.atan2(reflected.y, reflected.x) - Math.atan2(aimDirection.y, aimDirection.x);
+    secondaryStartX = bestDistance;
+    secondaryStartZ = 0;
+  }
+
+  return { primaryDistance: bestDistance, secondaryDistance, secondaryAngle, secondaryStartX, secondaryStartZ };
+}
+
+function positionAimGuide() {
+  aimGuide.position(cueBall, aimDirection, Number(dom.slider.value) / 100, getAimPreview());
+}
+
+function updateAim(clientX, clientY) {
+  if (shotActive || gameOver || placingCueBall || !cueBall.active) return;
+  const point = getTablePoint(clientX, clientY);
+  if (!point) return;
+  aimDirection.set(point.x - cueBall.mesh.position.x, point.z - cueBall.mesh.position.z);
   if (aimDirection.lengthSq() < 0.001) return;
   aimDirection.normalize();
   positionAimGuide();
 }
 
 function shoot() {
-  if (shotActive || gameOver || !cueBall.active) return;
-  const ownBallsRemaining = balls.some((ball) => ball.active && (
-    currentPlayer === 1
-      ? ball.number >= 1 && ball.number <= 7
-      : ball.number >= 9 && ball.number <= 15
-  ));
-  shot = createShotRecord(!ownBallsRemaining);
+  if (shotActive || gameOver || placingCueBall || !cueBall.active) return;
+  shot = createShotRecord({
+    mustHitEight: groups[currentPlayer] !== null && !hasPlayerGroupBalls(currentPlayer),
+    isBreak: !breakComplete,
+  });
   const speed = 3.2 + Number(dom.slider.value) / 100 * 8.8;
   cueBall.velocity.copy(aimDirection).multiplyScalar(speed);
   shotActive = true;
   aimGuide.group.visible = false;
   dom.shoot.disabled = true;
-  updateTurn(currentPlayer, 'BALLS IN MOTION');
+  updateTurn(currentPlayer, 'BALLS IN MOTION', playerState.names);
 }
 
 function findCueBallPosition() {
@@ -103,26 +213,49 @@ function respawnCueBall() {
   cueBall.velocity.set(0, 0);
 }
 
+function beginCuePlacement() {
+  placingCueBall = true;
+  respawnCueBall();
+  dom.shoot.disabled = true;
+  aimGuide.group.visible = false;
+  updateTurn(currentPlayer, 'PLACE CUE BALL', playerState.names);
+}
+
+function finishCuePlacement() {
+  if (!placingCueBall) return;
+  placingCueBall = false;
+  dom.shoot.disabled = false;
+  aimGuide.group.visible = true;
+  updateTurn(currentPlayer, getTurnStatus(), playerState.names);
+  positionAimGuide();
+}
+
 function endTurn() {
   shotActive = false;
-  const result = evaluateShot({ shot, player: currentPlayer, balls });
+  const result = evaluateShot({ shot, player: currentPlayer, balls, groups });
+  groups = result.groups;
+  if (result.breakComplete) breakComplete = true;
+  updateScoreboard(balls, groups, playerState);
   if (result.winner) {
     gameOver = true;
     dom.shoot.disabled = true;
     aimGuide.group.visible = false;
+    playerState.wins[result.winner] += 1;
+    savePlayerState(playerState);
+    updateScoreboard(balls, groups, playerState);
     if (result.foul) showFoul(result.foul);
-    showWinner(result.winner);
+    showWinner(result.winner, playerState.names);
     return;
   }
 
   if (result.foul) {
     showFoul(result.foul);
     currentPlayer = currentPlayer === 1 ? 2 : 1;
-    respawnCueBall();
-    updateTurn(currentPlayer, 'BALL IN HAND');
+    beginCuePlacement();
+    return;
   } else {
     if (!result.keepTurn) currentPlayer = currentPlayer === 1 ? 2 : 1;
-    updateTurn(currentPlayer);
+    updateTurn(currentPlayer, getTurnStatus(), playerState.names);
   }
 
   aimGuide.group.visible = true;
@@ -151,10 +284,26 @@ function resetGame() {
   window.location.reload();
 }
 
-dom.slider.addEventListener('input', () => {
-  const value = dom.slider.value;
+function updatePowerControl() {
+  const value = Number(dom.slider.value);
+  const min = Number(dom.slider.min);
+  const max = Number(dom.slider.max);
+  const progress = ((value - min) / (max - min)) * 100;
   dom.powerValue.textContent = `${value}%`;
-  dom.slider.style.background = `linear-gradient(90deg, var(--gold) ${value}%, #26342e ${value}%)`;
+  dom.slider.style.background = `linear-gradient(90deg, var(--gold) ${progress}%, #26342e ${progress}%)`;
+}
+
+function adjustPower(delta) {
+  const min = Number(dom.slider.min);
+  const max = Number(dom.slider.max);
+  const nextValue = THREE.MathUtils.clamp(Number(dom.slider.value) + delta, min, max);
+  dom.slider.value = nextValue;
+  updatePowerControl();
+  positionAimGuide();
+}
+
+dom.slider.addEventListener('input', () => {
+  updatePowerControl();
   positionAimGuide();
 });
 dom.shoot.addEventListener('click', shoot);
@@ -164,22 +313,49 @@ window.addEventListener('keydown', (event) => {
   if (event.code === 'Space') {
     event.preventDefault();
     shoot();
+  } else if (event.code === 'ArrowUp' || event.code === 'ArrowRight' || event.code === 'Equal') {
+    event.preventDefault();
+    adjustPower(event.shiftKey ? 10 : 5);
+  } else if (event.code === 'ArrowDown' || event.code === 'ArrowLeft' || event.code === 'Minus') {
+    event.preventDefault();
+    adjustPower(event.shiftKey ? -10 : -5);
   }
 });
 world.renderer.domElement.addEventListener('pointerdown', (event) => {
   dragging = true;
   world.renderer.domElement.setPointerCapture(event.pointerId);
+  if (placingCueBall) {
+    moveCueBallToPointer(event.clientX, event.clientY);
+    return;
+  }
   updateAim(event.clientX, event.clientY);
 });
-world.renderer.domElement.addEventListener('pointermove', (event) => updateAim(event.clientX, event.clientY));
+world.renderer.domElement.addEventListener('pointermove', (event) => {
+  if (placingCueBall && dragging) {
+    moveCueBallToPointer(event.clientX, event.clientY);
+    return;
+  }
+  updateAim(event.clientX, event.clientY);
+});
 world.renderer.domElement.addEventListener('pointerup', (event) => {
+  if (placingCueBall) {
+    moveCueBallToPointer(event.clientX, event.clientY);
+    finishCuePlacement();
+    dragging = false;
+    return;
+  }
   if (dragging && event.pointerType === 'touch') shoot();
   dragging = false;
 });
 window.addEventListener('resize', resize);
 
 resize();
+bindPlayerNames(playerState, () => {
+  updateTurn(currentPlayer, placingCueBall ? 'PLACE CUE BALL' : getTurnStatus(), playerState.names);
+  updateScoreboard(balls, groups, playerState);
+});
+updatePowerControl();
 positionAimGuide();
-updateTurn(currentPlayer);
-updateScoreboard(balls);
+updateTurn(currentPlayer, getTurnStatus(), playerState.names);
+updateScoreboard(balls, groups, playerState);
 requestAnimationFrame(animate);

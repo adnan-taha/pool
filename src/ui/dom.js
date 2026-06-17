@@ -12,8 +12,14 @@ export const dom = {
   turnStatus: document.querySelector('#turn-status'),
   p1Panel: document.querySelector('#player-one-panel'),
   p2Panel: document.querySelector('#player-two-panel'),
+  p1Name: document.querySelector('#player-one-name'),
+  p2Name: document.querySelector('#player-two-name'),
   p1Score: document.querySelector('#player-one-score'),
   p2Score: document.querySelector('#player-two-score'),
+  p1Group: document.querySelector('#player-one-group'),
+  p2Group: document.querySelector('#player-two-group'),
+  p1Match: document.querySelector('#player-one-match'),
+  p2Match: document.querySelector('#player-two-match'),
   p1Tray: document.querySelector('#player-one-tray'),
   p2Tray: document.querySelector('#player-two-tray'),
   message: document.querySelector('#table-message'),
@@ -25,23 +31,87 @@ export const dom = {
 
 let foulTimer;
 
-export function updateTurn(player, status = 'YOUR SHOT') {
-  dom.turnLabel.textContent = `PLAYER ${player === 1 ? 'ONE' : 'TWO'}`;
+export const DEFAULT_PLAYER_STATE = {
+  names: { 1: 'Player 1', 2: 'Player 2' },
+  wins: { 1: 0, 2: 0 },
+};
+
+const PLAYER_STORAGE_KEY = 'corner-pocket-players';
+
+function groupLabel(group) {
+  if (group === 'solids') return 'SOLIDS';
+  if (group === 'stripes') return 'STRIPES';
+  return 'OPEN';
+}
+
+function ballMatchesGroup(number, group) {
+  if (group === 'solids') return number >= 1 && number <= 7;
+  if (group === 'stripes') return number >= 9 && number <= 15;
+  return false;
+}
+
+function scoredBallsForPlayer(balls, player, groups) {
+  const group = groups[player];
+  if (!group) return [];
+  return balls.filter((ball) => !ball.active && ballMatchesGroup(ball.number, group));
+}
+
+export function loadPlayerState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PLAYER_STORAGE_KEY));
+    return {
+      names: { ...DEFAULT_PLAYER_STATE.names, ...saved?.names },
+      wins: { ...DEFAULT_PLAYER_STATE.wins, ...saved?.wins },
+    };
+  } catch {
+    return DEFAULT_PLAYER_STATE;
+  }
+}
+
+export function savePlayerState(playerState) {
+  localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify(playerState));
+}
+
+export function bindPlayerNames(playerState, onChange) {
+  dom.p1Name.value = playerState.names[1];
+  dom.p2Name.value = playerState.names[2];
+  for (const [player, input] of [[1, dom.p1Name], [2, dom.p2Name]]) {
+    input.addEventListener('input', () => {
+      playerState.names[player] = input.value.trim() || `Player ${player}`;
+      savePlayerState(playerState);
+      onChange?.();
+    });
+  }
+}
+
+export function updateTurn(player, status = 'YOUR SHOT', names = DEFAULT_PLAYER_STATE.names) {
+  dom.turnLabel.textContent = names[player].toUpperCase();
   dom.turnStatus.textContent = status;
   dom.p1Panel.classList.toggle('active', player === 1);
   dom.p2Panel.classList.toggle('active', player === 2);
 }
 
-export function updateScoreboard(balls) {
-  dom.p1Score.textContent = balls.filter((ball) => ball.number >= 1 && ball.number <= 7 && !ball.active).length;
-  dom.p2Score.textContent = balls.filter((ball) => ball.number >= 9 && ball.number <= 15 && !ball.active).length;
+export function updateScoreboard(balls, groups = { 1: 'solids', 2: 'stripes' }, playerState = DEFAULT_PLAYER_STATE) {
+  const p1Scored = scoredBallsForPlayer(balls, 1, groups);
+  const p2Scored = scoredBallsForPlayer(balls, 2, groups);
+  dom.p1Score.textContent = p1Scored.length;
+  dom.p2Score.textContent = p2Scored.length;
+  dom.p1Group.textContent = groupLabel(groups[1]);
+  dom.p2Group.textContent = groupLabel(groups[2]);
+  dom.p1Match.textContent = playerState.wins[1];
+  dom.p2Match.textContent = playerState.wins[2];
   dom.p1Tray.innerHTML = '';
   dom.p2Tray.innerHTML = '';
-  balls.filter((ball) => !ball.active && ball.number > 0 && ball.number !== 8).forEach((ball) => {
+  const trayBalls = groups[1] && groups[2]
+    ? [...p1Scored.map((ball) => [ball, dom.p1Tray]), ...p2Scored.map((ball) => [ball, dom.p2Tray])]
+    : balls
+      .filter((ball) => !ball.active && ball.number > 0 && ball.number !== 8)
+      .map((ball) => [ball, ball.number <= 7 ? dom.p1Tray : dom.p2Tray]);
+  trayBalls.forEach(([ball, tray]) => {
     const dot = document.createElement('i');
     dot.className = 'tray-ball';
     dot.style.background = `#${BALL_COLORS[ball.number - 1].toString(16).padStart(6, '0')}`;
-    (ball.number <= 7 ? dom.p1Tray : dom.p2Tray).appendChild(dot);
+    tray.appendChild(dot);
   });
 }
 
@@ -52,8 +122,8 @@ export function showFoul(reason) {
   foulTimer = setTimeout(() => dom.foulNotice.classList.add('hidden'), 2600);
 }
 
-export function showWinner(winner) {
+export function showWinner(winner, names = DEFAULT_PLAYER_STATE.names) {
   dom.messageKicker.textContent = 'GAME OVER';
-  dom.messageTitle.textContent = `PLAYER ${winner === 1 ? 'ONE' : 'TWO'} WINS`;
+  dom.messageTitle.textContent = `${names[winner].toUpperCase()} WINS`;
   dom.message.classList.remove('hidden');
 }

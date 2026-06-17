@@ -10,8 +10,12 @@ npm run dev
 ```
 
 Open the URL printed by Vite. Move the pointer over the table to aim, set shot
-power with the slider, and click **Shoot** or press <kbd>Space</kbd>. On touch
-screens, drag to aim and release to shoot.
+power with the slider or arrow keys, and click **Shoot** or press
+<kbd>Space</kbd>. Use <kbd>Shift</kbd> with the arrow keys for larger power
+steps. On touch screens, drag to aim and release to shoot.
+
+After a foul, drag on the table to place the cue ball before shooting. Player
+names are editable in the side panels, and match wins are saved in the browser.
 
 ## Project structure
 
@@ -38,6 +42,10 @@ tests/
 ## Rules
 
 - Player 1 shoots solids (1-7); Player 2 shoots stripes (9-15).
+- The table starts open. Groups are assigned by the first legal non-break
+  pocket after the break.
+- The opening break must pocket an object ball or drive four object balls to
+  rails.
 - Pocketing one of your balls keeps your turn.
 - A miss or scratch changes the turn.
 - Fouls include a scratch, no object-ball contact, contacting the wrong group

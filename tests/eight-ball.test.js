@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createShotRecord, evaluateShot } from '../src/rules/eight-ball.js';
+import { createShotRecord, evaluateShot, recordBallRailContact } from '../src/rules/eight-ball.js';
 
 function ball(number, active = true) {
   return { number, active };
@@ -51,4 +51,66 @@ test('the 8-ball is legal only after the group is cleared', () => {
   const result = evaluateShot({ shot, player: 1, balls: [ball(1, false), ball(8, false), ball(9)] });
   assert.equal(result.foul, null);
   assert.equal(result.winner, 1);
+});
+
+test('open table assigns groups after a legal pocket', () => {
+  const shot = createShotRecord();
+  shot.firstContact = 10;
+  shot.pocketed = [10];
+  const result = evaluateShot({
+    shot,
+    player: 1,
+    balls: [ball(1), ball(8), ball(10, false)],
+    groups: { 1: null, 2: null },
+  });
+  assert.equal(result.foul, null);
+  assert.equal(result.keepTurn, true);
+  assert.deepEqual(result.groups, { 1: 'stripes', 2: 'solids' });
+});
+
+test('open table cannot contact the 8-ball first before groups are assigned', () => {
+  const shot = createShotRecord();
+  shot.firstContact = 8;
+  shot.railAfterContact = true;
+  const result = evaluateShot({
+    shot,
+    player: 1,
+    balls: [ball(1), ball(8), ball(10)],
+    groups: { 1: null, 2: null },
+  });
+  assert.equal(result.foul, 'Wrong ball contacted first');
+});
+
+test('a break must pocket a ball or drive four object balls to rails', () => {
+  const shot = createShotRecord({ isBreak: true });
+  shot.firstContact = 1;
+  recordBallRailContact(shot, 1);
+  recordBallRailContact(shot, 2);
+  recordBallRailContact(shot, 3);
+  const result = evaluateShot({
+    shot,
+    player: 1,
+    balls: [ball(1), ball(2), ball(3), ball(4), ball(8), ball(9)],
+    groups: { 1: null, 2: null },
+  });
+  assert.equal(result.foul, 'Illegal break: pocket a ball or drive four balls to rails');
+  assert.equal(result.breakComplete, true);
+});
+
+test('a legal break leaves the table open', () => {
+  const shot = createShotRecord({ isBreak: true });
+  shot.firstContact = 1;
+  recordBallRailContact(shot, 1);
+  recordBallRailContact(shot, 2);
+  recordBallRailContact(shot, 3);
+  recordBallRailContact(shot, 4);
+  const result = evaluateShot({
+    shot,
+    player: 1,
+    balls: [ball(1), ball(2), ball(3), ball(4), ball(8), ball(9)],
+    groups: { 1: null, 2: null },
+  });
+  assert.equal(result.foul, null);
+  assert.equal(result.keepTurn, false);
+  assert.deepEqual(result.groups, { 1: null, 2: null });
 });

@@ -1,8 +1,21 @@
-export function createShotRecord(mustHitEight = false) {
+const GROUPS = {
+  solids: { label: 'SOLIDS', min: 1, max: 7 },
+  stripes: { label: 'STRIPES', min: 9, max: 15 },
+};
+
+function normalizeShotOptions(options) {
+  if (typeof options === 'boolean') return { mustHitEight: options, isBreak: false };
+  return { mustHitEight: false, isBreak: false, ...options };
+}
+
+export function createShotRecord(options = {}) {
+  const { mustHitEight, isBreak } = normalizeShotOptions(options);
   return {
     mustHitEight,
+    isBreak,
     firstContact: null,
     railAfterContact: false,
+    railContacts: new Set(),
     pocketed: [],
     scratched: false,
   };
@@ -18,26 +31,66 @@ export function recordRailContact(shot) {
   if (shot.firstContact !== null) shot.railAfterContact = true;
 }
 
+export function recordBallRailContact(shot, ballNumber) {
+  if (shot.firstContact === null || ballNumber === 0) return;
+  shot.railAfterContact = true;
+  shot.railContacts.add(ballNumber);
+}
+
 export function recordPocket(shot, ballNumber) {
   shot.pocketed.push(ballNumber);
   if (ballNumber === 0) shot.scratched = true;
 }
 
-function isPlayerBall(number, player) {
-  return player === 1 ? number >= 1 && number <= 7 : number >= 9 && number <= 15;
+export function getOppositeGroup(group) {
+  if (group === 'solids') return 'stripes';
+  if (group === 'stripes') return 'solids';
+  return null;
 }
 
-export function evaluateShot({ shot, player, balls }) {
-  const ownBallsRemaining = balls.some((ball) => ball.active && isPlayerBall(ball.number, player));
+export function getBallGroup(number) {
+  if (number >= GROUPS.solids.min && number <= GROUPS.solids.max) return 'solids';
+  if (number >= GROUPS.stripes.min && number <= GROUPS.stripes.max) return 'stripes';
+  return null;
+}
+
+function isPlayerBall(number, player, groups) {
+  const group = groups[player];
+  if (!group) return getBallGroup(number) !== null;
+  return getBallGroup(number) === group;
+}
+
+function hasPlayerBallsRemaining(balls, player, groups) {
+  const group = groups[player];
+  if (!group) return balls.some((ball) => ball.active && getBallGroup(ball.number) !== null);
+  return balls.some((ball) => ball.active && getBallGroup(ball.number) === group);
+}
+
+function assignGroups(shot, player, groups) {
+  if (groups[player] || shot.isBreak) return groups;
+  const firstPocketedGroup = shot.pocketed.map(getBallGroup).find(Boolean);
+  if (!firstPocketedGroup) return groups;
+  return {
+    ...groups,
+    [player]: firstPocketedGroup,
+    [player === 1 ? 2 : 1]: getOppositeGroup(firstPocketedGroup),
+  };
+}
+
+export function evaluateShot({ shot, player, balls, groups = { 1: 'solids', 2: 'stripes' } }) {
+  const ownBallsRemaining = hasPlayerBallsRemaining(balls, player, groups);
   const legalFirstContact = shot.mustHitEight
     ? shot.firstContact === 8
-    : isPlayerBall(shot.firstContact, player);
+    : isPlayerBall(shot.firstContact, player, groups);
 
   let foul = null;
   if (shot.scratched) foul = 'Cue ball scratched';
   else if (shot.firstContact === null) foul = 'No object ball contacted';
   else if (!legalFirstContact) foul = shot.mustHitEight ? 'The 8-ball must be contacted first' : 'Wrong ball contacted first';
-  else if (shot.pocketed.length === 0 && !shot.railAfterContact) foul = 'No ball reached a rail after contact';
+  else if (shot.isBreak) {
+    const objectBallsPocketed = shot.pocketed.filter((number) => number > 0).length;
+    if (objectBallsPocketed === 0 && shot.railContacts.size < 4) foul = 'Illegal break: pocket a ball or drive four balls to rails';
+  } else if (shot.pocketed.length === 0 && !shot.railAfterContact) foul = 'No ball reached a rail after contact';
 
   const eightPocketed = shot.pocketed.includes(8);
   if (eightPocketed) {
@@ -45,12 +98,19 @@ export function evaluateShot({ shot, player, balls }) {
       foul,
       winner: foul || ownBallsRemaining ? (player === 1 ? 2 : 1) : player,
       keepTurn: false,
+      groups,
+      breakComplete: true,
     };
   }
+
+  const nextGroups = foul ? groups : assignGroups(shot, player, groups);
+  const ownPocketed = shot.pocketed.some((number) => isPlayerBall(number, player, nextGroups));
 
   return {
     foul,
     winner: null,
-    keepTurn: !foul && shot.pocketed.some((number) => isPlayerBall(number, player)),
+    keepTurn: !foul && (shot.isBreak ? shot.pocketed.some((number) => number > 0) : ownPocketed),
+    groups: nextGroups,
+    breakComplete: shot.isBreak || undefined,
   };
 }
