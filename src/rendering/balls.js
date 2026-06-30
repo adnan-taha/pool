@@ -3,6 +3,7 @@ import { BALL_COLORS, TABLE } from '../config/constants.js';
 
 const RACK_NUMBERS = [1, 10, 3, 5, 8, 12, 14, 2, 7, 15, 9, 6, 4, 11, 13];
 
+// Paint each numbered solid/stripe onto a canvas used as a sphere texture.
 function createNumberTexture(number, color) {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
@@ -32,6 +33,7 @@ function createNumberTexture(number, color) {
 }
 
 export function createBalls(scene) {
+  // Reuse one sphere geometry; each ball gets its own numbered material and state.
   const geometry = new THREE.SphereGeometry(TABLE.ballRadius, 32, 24);
   const balls = [];
 
@@ -45,11 +47,19 @@ export function createBalls(scene) {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     scene.add(mesh);
-    const ball = { number, mesh, velocity: new THREE.Vector2(), active: true, pocketing: false };
+    const ball = {
+      number,
+      mesh,
+      velocity: new THREE.Vector2(),
+      angularVelocity: new THREE.Vector3(),
+      active: true,
+      pocketing: false,
+    };
     balls.push(ball);
     return ball;
   }
 
+  // Place the cue ball and build the standard five-row triangular rack.
   const cueBall = addBall(0, -2.6, 0);
   const spacing = TABLE.ballRadius * 2.04;
   let rackIndex = 0;

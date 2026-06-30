@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 export function createScene(canvasHost) {
+  // Set up the camera, color-managed WebGL renderer, shadows, and table lighting.
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x07110e);
 
@@ -26,6 +27,7 @@ export function createScene(canvasHost) {
   scene.add(keyLight);
 
   function resize(width, height) {
+    // Keep the renderer and perspective projection aligned with the responsive host.
     renderer.setSize(width, height, false);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();

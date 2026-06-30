@@ -185,8 +185,58 @@ button { color: inherit; }
   background: rgba(5, 14, 11, .72);
 }
 
-.control-copy span, .power-control label span { display: block; color: var(--gold); font: 700 10px/1 "Barlow Condensed"; letter-spacing: .18em; }
-.control-copy strong { display: block; margin-top: 7px; color: #b9c2bd; font: 700 14px/1 "Barlow Condensed"; letter-spacing: .1em; }
+.spin-control { justify-self: start; }
+.spin-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 150px;
+  margin-bottom: 7px;
+}
+.spin-heading span, .power-control label span { display: block; color: var(--gold); font: 700 10px/1 "Barlow Condensed"; letter-spacing: .18em; }
+.spin-heading strong { color: #b9c2bd; font: 700 10px/1 "Barlow Condensed"; letter-spacing: .08em; }
+.spin-tools { display: flex; align-items: center; gap: 10px; }
+.spin-pad {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
+  border: 2px solid #d8d1c2;
+  border-radius: 50%;
+  cursor: crosshair;
+  touch-action: none;
+  background:
+    linear-gradient(90deg, transparent calc(50% - .5px), rgba(20, 25, 22, .28) 50%, transparent calc(50% + .5px)),
+    linear-gradient(transparent calc(50% - .5px), rgba(20, 25, 22, .28) 50%, transparent calc(50% + .5px)),
+    #eee9dd;
+  box-shadow: inset 0 0 10px rgba(0,0,0,.2), 0 3px 10px rgba(0,0,0,.25);
+}
+.spin-pad i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #fff4d6;
+  border-radius: 50%;
+  background: #b93c32;
+  box-shadow: 0 1px 4px rgba(0,0,0,.55);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+.spin-tools button {
+  min-width: 74px;
+  height: 30px;
+  padding: 0 9px;
+  border: 1px solid rgba(231, 220, 197, .2);
+  border-radius: 2px;
+  background: rgba(255,255,255,.035);
+  color: #aeb9b3;
+  cursor: pointer;
+  font: 700 9px/1 "Barlow Condensed";
+  letter-spacing: .12em;
+}
+.spin-tools button:hover { border-color: var(--gold); color: var(--gold); }
 .power-control label { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .power-control label strong { color: var(--cream); font: 600 13px/1 "Barlow Condensed"; }
 
@@ -254,6 +304,9 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border-radius
   .ball-tray { grid-template-columns: repeat(2, 10px); }
   .tray-ball { width: 10px; height: 10px; }
   .control-deck { grid-template-columns: 1fr minmax(220px, 2fr) 1fr; padding-inline: 24px; gap: 20px; }
+  .spin-heading { width: 126px; }
+  .spin-tools { gap: 7px; }
+  .spin-tools button { min-width: 62px; padding-inline: 6px; }
 }
 
 @media (max-width: 640px) {
@@ -272,7 +325,11 @@ input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; border-radius
   .score-panel small { display: none; }
   .ball-tray { display: flex; margin: 0; min-height: 0; }
   .mobile-hint { display: block; }
-  .control-deck { min-height: 94px; grid-template-columns: 1fr 105px; padding: 13px 16px; gap: 14px; }
-  .control-copy { display: none; }
+  .control-deck { min-height: 104px; grid-template-columns: 64px minmax(120px, 1fr) 92px; padding: 10px 8px; gap: 8px; }
+  .spin-heading { width: 54px; justify-content: center; }
+  .spin-heading strong { display: none; }
+  .spin-tools button { display: none; }
+  .spin-pad { width: 48px; height: 48px; flex-basis: 48px; }
   .shoot-button { min-height: 54px; }
+  .power-keys { display: none; }
 }

@@ -53,9 +53,23 @@
       </section>
 
       <footer class="control-deck">
-        <div class="control-copy">
-          <span>AIM</span>
-          <strong>MOVE YOUR POINTER</strong>
+        <div class="spin-control">
+          <div class="spin-heading">
+            <span>CUE SPIN</span>
+            <strong id="spin-value">CENTER</strong>
+          </div>
+          <div class="spin-tools">
+            <div
+              class="spin-pad"
+              id="spin-pad"
+              role="application"
+              tabindex="0"
+              aria-label="Cue ball spin: drag horizontally for side spin and vertically for follow or draw"
+            >
+              <i id="spin-marker"></i>
+            </div>
+            <button id="spin-reset" type="button">CENTER</button>
+          </div>
         </div>
         <div class="power-control">
           <label for="power-slider"><span>SHOT POWER</span><strong id="power-value">48%</strong></label>

@@ -1,10 +1,15 @@
 import { BALL_COLORS } from '../config/constants.js';
 
+// Cache stable DOM references used by the app and display helpers.
 export const dom = {
   canvas: document.querySelector('#game-canvas'),
   wrap: document.querySelector('#table-wrap'),
   slider: document.querySelector('#power-slider'),
   powerValue: document.querySelector('#power-value'),
+  spinPad: document.querySelector('#spin-pad'),
+  spinMarker: document.querySelector('#spin-marker'),
+  spinValue: document.querySelector('#spin-value'),
+  spinReset: document.querySelector('#spin-reset'),
   shoot: document.querySelector('#shoot-button'),
   reset: document.querySelector('#reset-button'),
   playAgain: document.querySelector('#play-again'),
@@ -57,6 +62,7 @@ function scoredBallsForPlayer(balls, player, groups) {
 }
 
 export function loadPlayerState() {
+  // Names and match wins persist across page reloads; malformed data falls back safely.
   try {
     const saved = JSON.parse(localStorage.getItem(PLAYER_STORAGE_KEY));
     return {
@@ -73,6 +79,7 @@ export function savePlayerState(playerState) {
 }
 
 export function bindPlayerNames(playerState, onChange) {
+  // Keep editable names synchronized with localStorage and the active-turn header.
   dom.p1Name.value = playerState.names[1];
   dom.p2Name.value = playerState.names[2];
   for (const [player, input] of [[1, dom.p1Name], [2, dom.p2Name]]) {
@@ -92,6 +99,7 @@ export function updateTurn(player, status = 'YOUR SHOT', names = DEFAULT_PLAYER_
 }
 
 export function updateScoreboard(balls, groups = { 1: 'solids', 2: 'stripes' }, playerState = DEFAULT_PLAYER_STATE) {
+  // Scores and trays follow dynamic group assignment rather than fixed player sides.
   const p1Scored = scoredBallsForPlayer(balls, 1, groups);
   const p2Scored = scoredBallsForPlayer(balls, 2, groups);
   dom.p1Score.textContent = p1Scored.length;
@@ -116,6 +124,7 @@ export function updateScoreboard(balls, groups = { 1: 'solids', 2: 'stripes' }, 
 }
 
 export function showFoul(reason) {
+  // Fouls use a temporary non-blocking notice so ball-in-hand remains interactive.
   clearTimeout(foulTimer);
   dom.foulReason.textContent = reason;
   dom.foulNotice.classList.remove('hidden');
@@ -123,6 +132,7 @@ export function showFoul(reason) {
 }
 
 export function showWinner(winner, names = DEFAULT_PLAYER_STATE.names) {
+  // The game-over overlay blocks the table until a new rack starts.
   dom.messageKicker.textContent = 'GAME OVER';
   dom.messageTitle.textContent = `${names[winner].toUpperCase()} WINS`;
   dom.message.classList.remove('hidden');

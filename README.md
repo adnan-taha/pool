@@ -14,8 +14,22 @@ power with the slider or arrow keys, and click **Shoot** or press
 <kbd>Space</kbd>. Use <kbd>Shift</kbd> with the arrow keys for larger power
 steps. On touch screens, drag to aim and release to shoot.
 
+Use the cue-ball control in the footer to apply spin:
+
+- Drag upward for follow and downward for draw.
+- Drag left or right for side spin (english).
+- Select the spin control with the keyboard and use its arrow keys for precise
+  adjustment. Press <kbd>Home</kbd> to center it.
+
 After a foul, drag on the table to place the cue ball before shooting. Player
 names are editable in the side panels, and match wins are saved in the browser.
+
+## Physics
+
+Balls track linear and angular velocity. Cue offset creates torque, sliding
+friction transitions balls into rolling, rolling and vertical-axis spin decay
+separately, and side spin affects cushion contact. Ball-ball collisions remain
+pairwise and frictionless, matching the assumptions in `docs/39.docx`.
 
 ## Project structure
 

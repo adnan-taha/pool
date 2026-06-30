@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import '../styles/main.css';
 import { PHYSICS, TABLE } from '../config/constants.js';
-import { PhysicsEngine } from '../engine/physics.js';
+import { applyCueStrike, PhysicsEngine } from '../engine/physics.js';
 import {
   createShotRecord,
   evaluateShot,
@@ -25,6 +25,7 @@ import {
   updateTurn,
 } from '../ui/dom.js';
 
+// Build the Three.js world and create the persistent game objects once.
 const world = createScene(dom.canvas);
 createTable(world.scene);
 const { balls, cueBall } = createBalls(world.scene);
@@ -40,8 +41,11 @@ let shot = createShotRecord();
 let accumulator = 0;
 let lastTime = performance.now();
 let dragging = false;
+let spinDragging = false;
 const playerState = loadPlayerState();
+const cueSpin = new THREE.Vector2();
 
+// Physics events feed the rule tracker and scoreboard without coupling either module.
 const physics = new PhysicsEngine(balls, {
   onBallCollision: (a, b) => {
     if (shotActive) recordCueContact(shot, a, b);
@@ -61,6 +65,7 @@ const intersection = new THREE.Vector3();
 const tablePlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.24);
 const aimDirection = new THREE.Vector2(1, 0);
 
+// Translate rule state into the short status shown above the table.
 function getTurnStatus() {
   if (!breakComplete) return 'BREAK';
   if (!groups[currentPlayer]) return 'OPEN TABLE';
@@ -74,6 +79,7 @@ function hasPlayerGroupBalls(player) {
 }
 
 function getTablePoint(clientX, clientY) {
+  // Ray-plane intersection converts a screen pointer into table coordinates.
   const rect = world.renderer.domElement.getBoundingClientRect();
   pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
@@ -83,6 +89,7 @@ function getTablePoint(clientX, clientY) {
 }
 
 function isLegalCueBallPosition(x, z) {
+  // Ball-in-hand placement must stay inside the rails and avoid ball overlap.
   const xLimit = TABLE.width / 2 - TABLE.ballRadius;
   const zLimit = TABLE.height / 2 - TABLE.ballRadius;
   if (Math.abs(x) > xLimit || Math.abs(z) > zLimit) return false;
@@ -108,8 +115,9 @@ function moveCueBallToPointer(clientX, clientY) {
 }
 
 function getAimPreview() {
+  // Ray-circle intersection predicts the cue ball's first object-ball contact.
   const origin = cueBall.mesh.position;
-  let bestDistance = 3.6;
+  let bestDistance = Infinity;
   let secondaryDistance = 0;
   let secondaryAngle = 0;
   let secondaryStartX = 0;
@@ -138,6 +146,7 @@ function getAimPreview() {
     secondaryStartZ = -dx * aimDirection.y + dz * aimDirection.x;
   }
 
+  // Ray-boundary intersection predicts the first cushion contact and reflection.
   const xLimit = TABLE.width / 2 - TABLE.ballRadius;
   const zLimit = TABLE.height / 2 - TABLE.ballRadius;
   const railDistances = [];
@@ -167,6 +176,7 @@ function positionAimGuide() {
 }
 
 function updateAim(clientX, clientY) {
+  // The normalized vector from cue ball to pointer is the shot direction.
   if (shotActive || gameOver || placingCueBall || !cueBall.active) return;
   const point = getTablePoint(clientX, clientY);
   if (!point) return;
@@ -177,13 +187,15 @@ function updateAim(clientX, clientY) {
 }
 
 function shoot() {
+  // Create the rule record first, then apply the cue's linear impulse and torque.
   if (shotActive || gameOver || placingCueBall || !cueBall.active) return;
   shot = createShotRecord({
     mustHitEight: groups[currentPlayer] !== null && !hasPlayerGroupBalls(currentPlayer),
     isBreak: !breakComplete,
   });
   const speed = 3.2 + Number(dom.slider.value) / 100 * 8.8;
-  cueBall.velocity.copy(aimDirection).multiplyScalar(speed);
+  applyCueStrike(cueBall, aimDirection, speed, { x: cueSpin.x, y: cueSpin.y });
+  resetSpinControl();
   shotActive = true;
   aimGuide.group.visible = false;
   dom.shoot.disabled = true;
@@ -191,6 +203,7 @@ function shoot() {
 }
 
 function findCueBallPosition() {
+  // Search deterministic free positions for the initial ball-in-hand location.
   const candidates = [];
   for (let x = -3.5; x <= -0.5; x += 0.35) {
     for (let z = -1.8; z <= 1.8; z += 0.35) candidates.push([x, z]);
@@ -211,9 +224,11 @@ function respawnCueBall() {
   cueBall.mesh.scale.setScalar(1);
   cueBall.mesh.position.set(x, TABLE.ballRadius + 0.1, z);
   cueBall.velocity.set(0, 0);
+  cueBall.angularVelocity.set(0, 0, 0);
 }
 
 function beginCuePlacement() {
+  // A foul blocks shooting until the incoming player confirms a legal position.
   placingCueBall = true;
   respawnCueBall();
   dom.shoot.disabled = true;
@@ -231,6 +246,7 @@ function finishCuePlacement() {
 }
 
 function endTurn() {
+  // Rules consume the completed shot and return all state transitions in one result.
   shotActive = false;
   const result = evaluateShot({ shot, player: currentPlayer, balls, groups });
   groups = result.groups;
@@ -272,6 +288,7 @@ function animate(now) {
   const frameTime = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
   accumulator += frameTime;
+  // A fixed timestep keeps collision and friction behavior independent of frame rate.
   while (accumulator >= PHYSICS.fixedStep) {
     physics.step(PHYSICS.fixedStep);
     accumulator -= PHYSICS.fixedStep;
@@ -285,6 +302,7 @@ function resetGame() {
 }
 
 function updatePowerControl() {
+  // Normalize the range because its minimum is 15 rather than zero.
   const value = Number(dom.slider.value);
   const min = Number(dom.slider.min);
   const max = Number(dom.slider.max);
@@ -302,6 +320,43 @@ function adjustPower(delta) {
   positionAimGuide();
 }
 
+function spinLabel() {
+  const parts = [];
+  if (cueSpin.y > 0.18) parts.push('FOLLOW');
+  else if (cueSpin.y < -0.18) parts.push('DRAW');
+  if (cueSpin.x > 0.18) parts.push('RIGHT');
+  else if (cueSpin.x < -0.18) parts.push('LEFT');
+  return parts.join(' + ') || 'CENTER';
+}
+
+function updateSpinControl() {
+  // Map normalized cue offsets to the marker's circular control area.
+  dom.spinMarker.style.left = `${50 + cueSpin.x * 38}%`;
+  dom.spinMarker.style.top = `${50 - cueSpin.y * 38}%`;
+  dom.spinValue.textContent = spinLabel();
+  dom.spinPad.setAttribute('aria-valuetext', spinLabel());
+}
+
+function setSpin(x, y) {
+  // Clamp cue contact to the face of the ball to prevent impossible offsets.
+  cueSpin.set(x, y);
+  if (cueSpin.lengthSq() > 1) cueSpin.normalize();
+  updateSpinControl();
+}
+
+function setSpinFromPointer(clientX, clientY) {
+  const rect = dom.spinPad.getBoundingClientRect();
+  const radius = Math.min(rect.width, rect.height) / 2;
+  setSpin(
+    (clientX - (rect.left + rect.width / 2)) / radius,
+    -((clientY - (rect.top + rect.height / 2)) / radius),
+  );
+}
+
+function resetSpinControl() {
+  setSpin(0, 0);
+}
+
 dom.slider.addEventListener('input', () => {
   updatePowerControl();
   positionAimGuide();
@@ -309,7 +364,32 @@ dom.slider.addEventListener('input', () => {
 dom.shoot.addEventListener('click', shoot);
 dom.reset.addEventListener('click', resetGame);
 dom.playAgain.addEventListener('click', resetGame);
+dom.spinReset.addEventListener('click', resetSpinControl);
+dom.spinPad.addEventListener('pointerdown', (event) => {
+  spinDragging = true;
+  dom.spinPad.setPointerCapture(event.pointerId);
+  setSpinFromPointer(event.clientX, event.clientY);
+});
+dom.spinPad.addEventListener('pointermove', (event) => {
+  if (spinDragging) setSpinFromPointer(event.clientX, event.clientY);
+});
+dom.spinPad.addEventListener('pointerup', (event) => {
+  setSpinFromPointer(event.clientX, event.clientY);
+  spinDragging = false;
+});
 window.addEventListener('keydown', (event) => {
+  if (event.target === dom.spinPad) {
+    const step = event.shiftKey ? 0.2 : 0.1;
+    if (event.code === 'ArrowUp') setSpin(cueSpin.x, cueSpin.y + step);
+    else if (event.code === 'ArrowDown') setSpin(cueSpin.x, cueSpin.y - step);
+    else if (event.code === 'ArrowLeft') setSpin(cueSpin.x - step, cueSpin.y);
+    else if (event.code === 'ArrowRight') setSpin(cueSpin.x + step, cueSpin.y);
+    else if (event.code === 'Home') resetSpinControl();
+    else return;
+    event.preventDefault();
+    return;
+  }
+  if (event.target instanceof HTMLInputElement && event.target !== dom.slider) return;
   if (event.code === 'Space') {
     event.preventDefault();
     shoot();
@@ -355,6 +435,7 @@ bindPlayerNames(playerState, () => {
   updateScoreboard(balls, groups, playerState);
 });
 updatePowerControl();
+updateSpinControl();
 positionAimGuide();
 updateTurn(currentPlayer, getTurnStatus(), playerState.names);
 updateScoreboard(balls, groups, playerState);

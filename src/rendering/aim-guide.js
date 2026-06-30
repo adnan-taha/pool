@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 
 export function createAimGuide(scene) {
+  // One group keeps the line, prediction, marker, and cue in the same local frame.
   const group = new THREE.Group();
   scene.add(group);
 
@@ -35,6 +36,7 @@ export function createAimGuide(scene) {
   group.add(cue);
 
   function setLineLength(target, distance) {
+    // Rebuild the two-point geometry to match the latest predicted distance.
     target.geometry.dispose();
     target.geometry = new THREE.BufferGeometry().setFromPoints([
       new THREE.Vector3(0, 0, 0),
@@ -44,6 +46,7 @@ export function createAimGuide(scene) {
   }
 
   function position(cueBall, direction, power, aimPreview) {
+    // Rotate local +X onto the shot direction and pull the cue back with power.
     group.position.copy(cueBall.mesh.position);
     group.position.y += 0.04;
     group.rotation.y = -Math.atan2(direction.y, direction.x);

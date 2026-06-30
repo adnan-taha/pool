@@ -3,12 +3,14 @@ const GROUPS = {
   stripes: { label: 'STRIPES', min: 9, max: 15 },
 };
 
+// Accept the old boolean form while supporting break-specific shot options.
 function normalizeShotOptions(options) {
   if (typeof options === 'boolean') return { mustHitEight: options, isBreak: false };
   return { mustHitEight: false, isBreak: false, ...options };
 }
 
 export function createShotRecord(options = {}) {
+  // A shot record collects physics events until every ball stops translating.
   const { mustHitEight, isBreak } = normalizeShotOptions(options);
   return {
     mustHitEight,
@@ -22,6 +24,7 @@ export function createShotRecord(options = {}) {
 }
 
 export function recordCueContact(shot, firstBall, secondBall) {
+  // Eight-ball legality depends on the cue ball's first object-ball contact.
   if (shot.firstContact !== null) return;
   if (firstBall.number === 0 && secondBall.number !== 0) shot.firstContact = secondBall.number;
   if (secondBall.number === 0 && firstBall.number !== 0) shot.firstContact = firstBall.number;
@@ -32,6 +35,7 @@ export function recordRailContact(shot) {
 }
 
 export function recordBallRailContact(shot, ballNumber) {
+  // Unique rail contacts are needed to validate the opening break.
   if (shot.firstContact === null || ballNumber === 0) return;
   shot.railAfterContact = true;
   shot.railContacts.add(ballNumber);
@@ -67,6 +71,7 @@ function hasPlayerBallsRemaining(balls, player, groups) {
 }
 
 function assignGroups(shot, player, groups) {
+  // The first legal non-break pocket closes the table and assigns both groups.
   if (groups[player] || shot.isBreak) return groups;
   const firstPocketedGroup = shot.pocketed.map(getBallGroup).find(Boolean);
   if (!firstPocketedGroup) return groups;
@@ -78,6 +83,7 @@ function assignGroups(shot, player, groups) {
 }
 
 export function evaluateShot({ shot, player, balls, groups = { 1: 'solids', 2: 'stripes' } }) {
+  // Evaluate fouls first, then win conditions, group assignment, and turn retention.
   const ownBallsRemaining = hasPlayerBallsRemaining(balls, player, groups);
   const legalFirstContact = shot.mustHitEight
     ? shot.firstContact === 8

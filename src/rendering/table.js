@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { POCKET_POSITIONS, TABLE } from '../config/constants.js';
 
 export function createTable(scene) {
+  // Assemble the table from simple meshes so dimensions match the physics constants.
   const group = new THREE.Group();
   scene.add(group);
 
   function box(width, height, depth, color, x, y, z, roughness = 0.6) {
+    // Shared helper for the bed, frame, rails, and cushions.
     const mesh = new THREE.Mesh(
       new THREE.BoxGeometry(width, height, depth),
       new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.05 }),
@@ -32,6 +34,7 @@ export function createTable(scene) {
   box(0.15, 0.16, TABLE.height - 0.45, 0x095d41, TABLE.width / 2 + 0.02, 0.17, 0, 0.8);
   box(0.15, 0.16, TABLE.height - 0.45, 0x095d41, -TABLE.width / 2 - 0.02, 0.17, 0, 0.8);
 
+  // Pocket centers reuse the same positions used by the physics capture test.
   const pocketGeometry = new THREE.CylinderGeometry(TABLE.pocketRadius, TABLE.pocketRadius * 1.12, 0.11, 32);
   const pocketMaterial = new THREE.MeshStandardMaterial({ color: 0x040604, roughness: 1 });
   for (const [x, z] of POCKET_POSITIONS) {
@@ -40,6 +43,7 @@ export function createTable(scene) {
     group.add(pocket);
   }
 
+  // Rail diamonds are visual aiming references only.
   const diamondMaterial = new THREE.MeshStandardMaterial({ color: 0xe8d8b4, roughness: 0.35 });
   const diamondGeometry = new THREE.BoxGeometry(0.07, 0.025, 0.07);
   for (const x of [-3.75, -2.5, -1.25, 1.25, 2.5, 3.75]) {
