@@ -11,18 +11,20 @@ npm run dev
 
 Open the URL printed by Vite. Move the pointer over the table to aim, set shot
 power with the slider or arrow keys, and click **Shoot** or press
-<kbd>Space</kbd>. Use <kbd>Shift</kbd> with the arrow keys for larger power
-steps. On touch screens, drag to aim and release to shoot.
+<kbd>Space</kbd>. Space works immediately with the default aim; the table does
+not need to receive pointer input first. Use <kbd>Shift</kbd> with the arrow
+keys for larger power steps. On touch screens, drag to aim and release to shoot.
 
 Use the cue-ball control in the footer to apply spin:
 
 - Drag upward for follow and downward for draw.
 - Drag left or right for side spin (english).
-- Select the spin control with the keyboard and use its arrow keys for precise
-  adjustment. Press <kbd>Home</kbd> to center it.
+- Use <kbd>W</kbd>/<kbd>S</kbd> for follow/draw and <kbd>A</kbd>/<kbd>D</kbd>
+  for left/right english. Press <kbd>R</kbd> to center it.
 
 After a foul, drag on the table to place the cue ball before shooting. Player
 names are editable in the side panels, and match wins are saved in the browser.
+The **SFX** button in the header mutes or enables the synthesized game sounds.
 
 ## Physics
 

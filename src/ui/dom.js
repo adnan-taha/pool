@@ -10,6 +10,7 @@ export const dom = {
   spinMarker: document.querySelector('#spin-marker'),
   spinValue: document.querySelector('#spin-value'),
   spinReset: document.querySelector('#spin-reset'),
+  sound: document.querySelector('#sound-button'),
   shoot: document.querySelector('#shoot-button'),
   reset: document.querySelector('#reset-button'),
   playAgain: document.querySelector('#play-again'),

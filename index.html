@@ -4,20 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#07110e" />
-    <title>Corner Pocket</title>
+    <title>Billiards</title>
   </head>
   <body>
     <main class="app-shell">
       <header class="topbar">
-        <a class="brand" href="#" aria-label="Corner Pocket home">
-          <span class="brand-mark"><i></i><i></i><i></i></span>
-          <span>CORNER <b>POCKET</b></span>
+        <a class="brand" href="#" aria-label="Billiards home">
+          <span>BILLIARDS</span>
         </a>
         <div class="turn-card">
           <span id="turn-label">PLAYER ONE</span>
           <strong id="turn-status">YOUR SHOT</strong>
         </div>
-        <button class="icon-button" id="reset-button" type="button" aria-label="Reset game" title="Reset game">↻</button>
+        <div class="top-actions">
+          <button class="icon-button sound-button" id="sound-button" type="button" aria-label="Mute sound effects" title="Mute sound effects">SFX</button>
+          <button class="icon-button" id="reset-button" type="button" aria-label="Reset game" title="Reset game">↻</button>
+        </div>
       </header>
 
       <section class="game-layout">
@@ -64,7 +66,7 @@
               id="spin-pad"
               role="application"
               tabindex="0"
-              aria-label="Cue ball spin: drag horizontally for side spin and vertically for follow or draw"
+              aria-label="Cue ball spin: drag the marker or use W A S D"
             >
               <i id="spin-marker"></i>
             </div>
@@ -75,7 +77,7 @@
           <label for="power-slider"><span>SHOT POWER</span><strong id="power-value">48%</strong></label>
           <input id="power-slider" type="range" min="15" max="100" value="48" />
           <div class="power-scale"><i></i><i></i><i></i><i></i><i></i></div>
-          <small class="power-keys">ARROWS / +/-</small>
+          <small class="power-keys">ARROW KEYS</small>
         </div>
         <button class="shoot-button" id="shoot-button" type="button">
           <span>SHOOT</span>

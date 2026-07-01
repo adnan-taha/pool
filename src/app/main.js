@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import '../styles/main.css';
+import { createSounds } from '../audio/sounds.js';
 import { PHYSICS, TABLE } from '../config/constants.js';
 import { applyCueStrike, PhysicsEngine } from '../engine/physics.js';
 import {
@@ -30,6 +31,7 @@ const world = createScene(dom.canvas);
 createTable(world.scene);
 const { balls, cueBall } = createBalls(world.scene);
 const aimGuide = createAimGuide(world.scene);
+const sounds = createSounds();
 
 let currentPlayer = 1;
 let groups = { 1: null, 2: null };
@@ -48,12 +50,15 @@ const cueSpin = new THREE.Vector2();
 // Physics events feed the rule tracker and scoreboard without coupling either module.
 const physics = new PhysicsEngine(balls, {
   onBallCollision: (a, b) => {
+    sounds.playCollision();
     if (shotActive) recordCueContact(shot, a, b);
   },
   onRailContact: (ball) => {
+    sounds.playRail();
     if (shotActive) recordBallRailContact(shot, ball.number);
   },
   onPocket: (ball) => {
+    sounds.playPocket();
     if (shotActive) recordPocket(shot, ball.number);
   },
   onPocketComplete: () => updateScoreboard(balls, groups, playerState),
@@ -194,6 +199,7 @@ function shoot() {
     isBreak: !breakComplete,
   });
   const speed = 3.2 + Number(dom.slider.value) / 100 * 8.8;
+  sounds.playShot(Number(dom.slider.value) / 100);
   applyCueStrike(cueBall, aimDirection, speed, { x: cueSpin.x, y: cueSpin.y });
   resetSpinControl();
   shotActive = true;
@@ -260,12 +266,14 @@ function endTurn() {
     savePlayerState(playerState);
     updateScoreboard(balls, groups, playerState);
     if (result.foul) showFoul(result.foul);
+    sounds.playWin();
     showWinner(result.winner, playerState.names);
     return;
   }
 
   if (result.foul) {
     showFoul(result.foul);
+    sounds.playFoul();
     currentPlayer = currentPlayer === 1 ? 2 : 1;
     beginCuePlacement();
     return;
@@ -344,6 +352,11 @@ function setSpin(x, y) {
   updateSpinControl();
 }
 
+function adjustSpin(x, y) {
+  const step = 0.1;
+  setSpin(cueSpin.x + x * step, cueSpin.y + y * step);
+}
+
 function setSpinFromPointer(clientX, clientY) {
   const rect = dom.spinPad.getBoundingClientRect();
   const radius = Math.min(rect.width, rect.height) / 2;
@@ -364,6 +377,12 @@ dom.slider.addEventListener('input', () => {
 dom.shoot.addEventListener('click', shoot);
 dom.reset.addEventListener('click', resetGame);
 dom.playAgain.addEventListener('click', resetGame);
+dom.sound.addEventListener('click', () => {
+  const muted = sounds.toggleMuted();
+  dom.sound.classList.toggle('muted', muted);
+  dom.sound.setAttribute('aria-label', muted ? 'Enable sound effects' : 'Mute sound effects');
+  dom.sound.title = muted ? 'Enable sound effects' : 'Mute sound effects';
+});
 dom.spinReset.addEventListener('click', resetSpinControl);
 dom.spinPad.addEventListener('pointerdown', (event) => {
   spinDragging = true;
@@ -378,27 +397,31 @@ dom.spinPad.addEventListener('pointerup', (event) => {
   spinDragging = false;
 });
 window.addEventListener('keydown', (event) => {
-  if (event.target === dom.spinPad) {
-    const step = event.shiftKey ? 0.2 : 0.1;
-    if (event.code === 'ArrowUp') setSpin(cueSpin.x, cueSpin.y + step);
-    else if (event.code === 'ArrowDown') setSpin(cueSpin.x, cueSpin.y - step);
-    else if (event.code === 'ArrowLeft') setSpin(cueSpin.x - step, cueSpin.y);
-    else if (event.code === 'ArrowRight') setSpin(cueSpin.x + step, cueSpin.y);
-    else if (event.code === 'Home') resetSpinControl();
-    else return;
-    event.preventDefault();
-    return;
-  }
   if (event.target instanceof HTMLInputElement && event.target !== dom.slider) return;
   if (event.code === 'Space') {
     event.preventDefault();
     shoot();
-  } else if (event.code === 'ArrowUp' || event.code === 'ArrowRight' || event.code === 'Equal') {
+  } else if (event.code === 'ArrowUp' || event.code === 'ArrowRight') {
     event.preventDefault();
     adjustPower(event.shiftKey ? 10 : 5);
-  } else if (event.code === 'ArrowDown' || event.code === 'ArrowLeft' || event.code === 'Minus') {
+  } else if (event.code === 'ArrowDown' || event.code === 'ArrowLeft') {
     event.preventDefault();
     adjustPower(event.shiftKey ? -10 : -5);
+  } else if (event.code === 'KeyW') {
+    event.preventDefault();
+    adjustSpin(0, 1);
+  } else if (event.code === 'KeyS') {
+    event.preventDefault();
+    adjustSpin(0, -1);
+  } else if (event.code === 'KeyA') {
+    event.preventDefault();
+    adjustSpin(-1, 0);
+  } else if (event.code === 'KeyD') {
+    event.preventDefault();
+    adjustSpin(1, 0);
+  } else if (event.code === 'KeyR') {
+    event.preventDefault();
+    resetSpinControl();
   }
 });
 world.renderer.domElement.addEventListener('pointerdown', (event) => {
